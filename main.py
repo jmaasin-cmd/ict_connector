@@ -141,8 +141,13 @@ async def stop_test():
 # ----------------------------
 # 📡 SENSOR INPUT
 # ----------------------------
-@app.post("/sensor-data")
-async def receive_sensor_data(data: SensorData):
-    await sensor_queue.put(data.dict())
+# @app.post("/sensor-data")
+# async def receive_sensor_data(data: SensorData):
+#     await sensor_queue.put(data.dict())
 
+#     return {"status": "queued"}
+@app.post("/sensor-data")
+async def receive_sensor_data(data: dict):
+    print("Incoming data:", data)
+    await sensor_queue.put(data)
     return {"status": "queued"}
