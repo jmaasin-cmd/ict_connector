@@ -36,12 +36,11 @@ class SensorData(BaseModel):
 async def run_test_loop():
     global is_running, current_batch_id
 
+    print("🔥 LOOP STARTED")
+
     async with httpx.AsyncClient(timeout=60) as client:
         while is_running and current_batch_id is not None:
             try:
-                print("🔥 LOOP STARTED")
-
-                # Wait for sensor data
                 print("📥 Waiting for sensor data...")
                 sensor_data = await sensor_queue.get()
                 print("✅ Sensor data received:", sensor_data)
@@ -80,13 +79,13 @@ async def run_test_loop():
                     print("⚠️ Empty prediction result")
                     continue
 
-                # 📦 Build payload
+                # ✅ FIXED: correct keys from ML response
                 payload = {
                     "moisture": predictions_in.get("Moisture"),
                     "temperature": predictions_in.get("Temperature"),
-                    "r": predictions_in.get("r"),
-                    "g": predictions_in.get("g"),
-                    "b": predictions_in.get("b"),
+                    "r": predictions_in.get("R"),
+                    "g": predictions_in.get("G"),
+                    "b": predictions_in.get("B"),
                     "svm_grade": predictions_out.get("SVM"),
                     "rf_grade": predictions_out.get("Random Forest"),
                     "knn_grade": predictions_out.get("KNN"),
@@ -99,7 +98,11 @@ async def run_test_loop():
                 laravel_url = f"{LARAVEL_API}/batch/{current_batch_id}/samples"
                 print("🌐 Laravel URL:", laravel_url)
 
-                laravel_res = await client.post(laravel_url, json=payload)
+                laravel_res = await client.post(
+                    laravel_url,
+                    json=payload,
+                    headers={"Accept": "application/json"}  # ✅ IMPORTANT
+                )
 
                 print("📡 Laravel status:", laravel_res.status_code)
                 print("📡 Laravel response:", laravel_res.text)
@@ -117,6 +120,8 @@ async def run_test_loop():
 @app.post("/start-test")
 async def start_test(data: StartRequest):
     global current_batch_id, is_running
+
+    print("🚀 START TEST CALLED:", data.batch_id)
 
     if is_running:
         return {"status": "already running"}
@@ -139,6 +144,8 @@ async def start_test(data: StartRequest):
 async def stop_test():
     global is_running, current_batch_id
 
+    print("🛑 STOP TEST CALLED")
+
     is_running = False
     batch_id = current_batch_id
     current_batch_id = None
@@ -157,3 +164,11 @@ async def receive_sensor_data(data: SensorData):
     await sensor_queue.put(data.dict())
     print("📥 Added to queue:", data.dict())
     return {"status": "queued"}
+
+
+# ----------------------------
+# 🏠 ROOT (OPTIONAL)
+# ----------------------------
+@app.get("/")
+def root():
+    return {"message": "Connector API running"}
