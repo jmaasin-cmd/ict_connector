@@ -58,9 +58,8 @@ async def run_test_loop():
                         "b": sensor_data["b"],
                     }
                 )
-
-                if predict_res.status_code != 200:
-                    print("Prediction failed:", predict_res.text)
+                if not predictions_out:
+                    print("⚠️ Empty prediction result")
                     continue
 
                 prediction = predict_res.json()
@@ -69,15 +68,28 @@ async def run_test_loop():
                 
 
                 print(f"Prediction data: {predictions_out}")
-                
+                print("✅ Sensor data:", sensor_data)
+                print("🔮 Prediction:", predictions_out)
+                print("📤 Sending to Laravel:", payload)
 
                 # 📦 Prepare payload
+                # payload = {
+                #     "moisture": predictions_in["Moisture"],
+                #     "temperature": predictions_in["Temperature"],
+                #     "r": sensor_data["R"],
+                #     "g": sensor_data["G"],
+                #     "b": sensor_data["B"],
+                #     "svm_grade": predictions_out.get("SVM"),
+                #     "rf_grade": predictions_out.get("Random Forest"),
+                #     "knn_grade": predictions_out.get("KNN"),
+                #     "lr_grade": predictions_out.get("Logistic Regression"),
+                # }
                 payload = {
-                    "moisture": predictions_in["Moisture"],
-                    "temperature": predictions_in["Temperature"],
-                    "r": sensor_data["R"],
-                    "g": sensor_data["G"],
-                    "b": sensor_data["B"],
+                    "moisture": predictions_in.get("Moisture"),
+                    "temperature": predictions_in.get("Temperature"),
+                    "r": predictions_in.get("R"),
+                    "g": predictions_in.get("G"),
+                    "b": predictions_in.get("B"),
                     "svm_grade": predictions_out.get("SVM"),
                     "rf_grade": predictions_out.get("Random Forest"),
                     "knn_grade": predictions_out.get("KNN"),
@@ -141,13 +153,8 @@ async def stop_test():
 # ----------------------------
 # 📡 SENSOR INPUT
 # ----------------------------
-# @app.post("/sensor-data")
-# async def receive_sensor_data(data: SensorData):
-#     await sensor_queue.put(data.dict())
-
-#     return {"status": "queued"}
+ @app.post("/sensor-data")
 @app.post("/sensor-data")
-async def receive_sensor_data(data: dict):
-    print("Incoming data:", data)
-    await sensor_queue.put(data)
+async def receive_sensor_data(data: SensorData):
+    await sensor_queue.put(data.dict())
     return {"status": "queued"}
