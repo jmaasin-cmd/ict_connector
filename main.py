@@ -122,8 +122,9 @@ async def start_test(data: StartRequest):
     global current_batch_id, is_running
 
     if is_running:
-        print("⚠️ Already running")
-        return {"status": "already running"}
+        print("⚠️ Restarting stuck loop...")
+        is_running = False
+        await asyncio.sleep(1)
 
     print("🚀 START TEST CALLED:", data.batch_id)
 
