@@ -121,10 +121,11 @@ async def run_test_loop():
 async def start_test(data: StartRequest):
     global current_batch_id, is_running
 
-    print("🚀 START TEST CALLED:", data.batch_id)
-
     if is_running:
+        print("⚠️ Already running")
         return {"status": "already running"}
+
+    print("🚀 START TEST CALLED:", data.batch_id)
 
     current_batch_id = data.batch_id
     is_running = True
@@ -135,7 +136,6 @@ async def start_test(data: StartRequest):
         "status": "started",
         "batch_id": current_batch_id
     }
-
 
 # ----------------------------
 # ⏹ STOP TEST
