@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 import asyncio
@@ -14,8 +13,8 @@ PREDICT_API = "https://copra-fastapi3.onrender.com/predict"
 current_batch_id = None
 is_running = False
 
-# Async queue (replaces latest_sensor_data)
-sensor_queue = asyncio.Queue()
+# Async queue
+sensor_queue = asyncio.Queue(maxsize=100)
 
 # ----------------------------
 # 📦 MODELS
@@ -40,12 +39,14 @@ async def run_test_loop():
     async with httpx.AsyncClient(timeout=60) as client:
         while is_running and current_batch_id is not None:
             try:
-                # Wait for sensor data (no polling!)
+                # Wait for sensor data
                 sensor_data = await sensor_queue.get()
+
                 if not all(k in sensor_data for k in ("r", "g", "b")):
                     print("⚠️ Skipping incomplete data:", sensor_data)
                     continue
-                print(f"Sensor data: {sensor_data}")
+
+                print("✅ Sensor data:", sensor_data)
 
                 # 🔮 CALL ML API
                 predict_res = await client.post(
@@ -58,32 +59,22 @@ async def run_test_loop():
                         "b": sensor_data["b"],
                     }
                 )
-                if not predictions_out:
-                    print("⚠️ Empty prediction result")
+
+                if predict_res.status_code != 200:
+                    print("❌ Prediction failed:", predict_res.text)
                     continue
 
                 prediction = predict_res.json()
                 predictions_in = prediction.get("input", {})
                 predictions_out = prediction.get("predictions", {})
-                
 
-                print(f"Prediction data: {predictions_out}")
-                print("✅ Sensor data:", sensor_data)
+                if not predictions_out:
+                    print("⚠️ Empty prediction result")
+                    continue
+
                 print("🔮 Prediction:", predictions_out)
-                print("📤 Sending to Laravel:", payload)
 
-                # 📦 Prepare payload
-                # payload = {
-                #     "moisture": predictions_in["Moisture"],
-                #     "temperature": predictions_in["Temperature"],
-                #     "r": sensor_data["R"],
-                #     "g": sensor_data["G"],
-                #     "b": sensor_data["B"],
-                #     "svm_grade": predictions_out.get("SVM"),
-                #     "rf_grade": predictions_out.get("Random Forest"),
-                #     "knn_grade": predictions_out.get("KNN"),
-                #     "lr_grade": predictions_out.get("Logistic Regression"),
-                # }
+                # 📦 Prepare payload (use ML response as source of truth)
                 payload = {
                     "moisture": predictions_in.get("Moisture"),
                     "temperature": predictions_in.get("Temperature"),
@@ -96,7 +87,7 @@ async def run_test_loop():
                     "lr_grade": predictions_out.get("Logistic Regression"),
                 }
 
-                print("Sending:", payload)
+                print("📤 Sending to Laravel:", payload)
 
                 # 📡 SEND TO LARAVEL
                 laravel_res = await client.post(
@@ -105,10 +96,10 @@ async def run_test_loop():
                 )
 
                 if laravel_res.status_code != 200:
-                    print("Laravel failed:", laravel_res.text)
+                    print("❌ Laravel failed:", laravel_res.text)
 
             except Exception as e:
-                print("Error:", str(e))
+                print("❌ Error:", str(e))
 
 
 # ----------------------------
@@ -124,7 +115,6 @@ async def start_test(data: StartRequest):
     current_batch_id = data.batch_id
     is_running = True
 
-    # Start async background task
     asyncio.create_task(run_test_loop())
 
     return {
@@ -153,7 +143,6 @@ async def stop_test():
 # ----------------------------
 # 📡 SENSOR INPUT
 # ----------------------------
- @app.post("/sensor-data")
 @app.post("/sensor-data")
 async def receive_sensor_data(data: SensorData):
     await sensor_queue.put(data.dict())
