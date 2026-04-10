@@ -13,8 +13,8 @@ PREDICT_API = "https://copra-fastapi3.onrender.com/predict"
 current_batch_id = None
 is_running = False
 
-# Async queue
-sensor_queue = asyncio.Queue(maxsize=100)
+# Async queue (replaces latest_sensor_data)
+sensor_queue = asyncio.Queue()
 
 # ----------------------------
 # 📦 MODELS
@@ -36,18 +36,15 @@ class SensorData(BaseModel):
 async def run_test_loop():
     global is_running, current_batch_id
 
-    print("🔥 LOOP STARTED")
-
     async with httpx.AsyncClient(timeout=60) as client:
         while is_running and current_batch_id is not None:
             try:
-                print("📥 Waiting for sensor data...")
+                # Wait for sensor data (no polling!)
                 sensor_data = await sensor_queue.get()
-                print("✅ Sensor data received:", sensor_data)
-
                 if not all(k in sensor_data for k in ("r", "g", "b")):
                     print("⚠️ Skipping incomplete data:", sensor_data)
                     continue
+                print(f"Sensor data: {sensor_data}")
 
                 # 🔮 CALL ML API
                 predict_res = await client.post(
@@ -61,57 +58,44 @@ async def run_test_loop():
                     }
                 )
 
-                print("📡 ML status:", predict_res.status_code)
-
                 if predict_res.status_code != 200:
-                    print("❌ Prediction failed:", predict_res.text)
+                    print("Prediction failed:", predict_res.text)
                     continue
 
                 prediction = predict_res.json()
-                print("📥 Raw prediction:", prediction)
-
                 predictions_in = prediction.get("input", {})
                 predictions_out = prediction.get("predictions", {})
+                
 
-                print("🔮 Prediction parsed:", predictions_out)
+                print(f"Prediction data: {predictions_out}")
+                
 
-                if not predictions_out:
-                    print("⚠️ Empty prediction result")
-                    continue
-
-                # ✅ FIXED: correct keys from ML response
+                # 📦 Prepare payload
                 payload = {
-                    "moisture": predictions_in.get("Moisture"),
-                    "temperature": predictions_in.get("Temperature"),
-                    "r": predictions_in.get("R"),
-                    "g": predictions_in.get("G"),
-                    "b": predictions_in.get("B"),
+                    "moisture": predictions_in["Moisture"],
+                    "temperature": predictions_in["Temperature"],
+                    "r": sensor_data["R"],
+                    "g": sensor_data["G"],
+                    "b": sensor_data["B"],
                     "svm_grade": predictions_out.get("SVM"),
                     "rf_grade": predictions_out.get("Random Forest"),
                     "knn_grade": predictions_out.get("KNN"),
                     "lr_grade": predictions_out.get("Logistic Regression"),
                 }
 
-                print("📤 Payload ready:", payload)
+                print("Sending:", payload)
 
                 # 📡 SEND TO LARAVEL
-                laravel_url = f"{LARAVEL_API}/batch/{current_batch_id}/samples"
-                print("🌐 Laravel URL:", laravel_url)
-
                 laravel_res = await client.post(
-                    laravel_url,
-                    json=payload,
-                    headers={"Accept": "application/json"}  # ✅ IMPORTANT
+                    f"{LARAVEL_API}/batch/{current_batch_id}/samples",
+                    json=payload
                 )
 
-                print("📡 Laravel status:", laravel_res.status_code)
-                print("📡 Laravel response:", laravel_res.text)
-
                 if laravel_res.status_code != 200:
-                    print("❌ Laravel failed")
+                    print("Laravel failed:", laravel_res.text)
 
             except Exception as e:
-                print("❌ Error:", str(e))
+                print("Error:", str(e))
 
 
 # ----------------------------
@@ -122,15 +106,12 @@ async def start_test(data: StartRequest):
     global current_batch_id, is_running
 
     if is_running:
-        print("⚠️ Restarting stuck loop...")
-        is_running = False
-        await asyncio.sleep(1)
-
-    print("🚀 START TEST CALLED:", data.batch_id)
+        return {"status": "already running"}
 
     current_batch_id = data.batch_id
     is_running = True
 
+    # Start async background task
     asyncio.create_task(run_test_loop())
 
     return {
@@ -138,14 +119,13 @@ async def start_test(data: StartRequest):
         "batch_id": current_batch_id
     }
 
+
 # ----------------------------
 # ⏹ STOP TEST
 # ----------------------------
 @app.post("/stop-test")
 async def stop_test():
     global is_running, current_batch_id
-
-    print("🛑 STOP TEST CALLED")
 
     is_running = False
     batch_id = current_batch_id
@@ -163,13 +143,5 @@ async def stop_test():
 @app.post("/sensor-data")
 async def receive_sensor_data(data: SensorData):
     await sensor_queue.put(data.dict())
-    print("📥 Added to queue:", data.dict())
+
     return {"status": "queued"}
-
-
-# ----------------------------
-# 🏠 ROOT (OPTIONAL)
-# ----------------------------
-@app.get("/")
-def root():
-    return {"message": "Connector API running"}
