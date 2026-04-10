@@ -34,73 +34,136 @@ class SensorData(BaseModel):
 # 🚀 BACKGROUND LOOP (ASYNC)
 # ----------------------------
 async def run_test_loop():
-    global is_running, current_batch_id
+    # global is_running, current_batch_id
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        while is_running and current_batch_id is not None:
-            try:
-                # Wait for sensor data
-                sensor_data = await sensor_queue.get()
+    # async with httpx.AsyncClient(timeout=60) as client:
+    #     while is_running and current_batch_id is not None:
+    #         try:
+    #             # Wait for sensor data
+    #             sensor_data = await sensor_queue.get()
 
-                if not all(k in sensor_data for k in ("r", "g", "b")):
-                    print("⚠️ Skipping incomplete data:", sensor_data)
-                    continue
+    #             if not all(k in sensor_data for k in ("r", "g", "b")):
+    #                 print("⚠️ Skipping incomplete data:", sensor_data)
+    #                 continue
 
-                print("✅ Sensor data:", sensor_data)
+    #             print("✅ Sensor data:", sensor_data)
 
-                # 🔮 CALL ML API
-                predict_res = await client.post(
-                    PREDICT_API,
-                    json={
-                        "moisture": sensor_data["moisture"],
-                        "temperature": sensor_data["temperature"],
-                        "r": sensor_data["r"],
-                        "g": sensor_data["g"],
-                        "b": sensor_data["b"],
-                    }
-                )
+    #             # 🔮 CALL ML API
+    #             predict_res = await client.post(
+    #                 PREDICT_API,
+    #                 json={
+    #                     "moisture": sensor_data["moisture"],
+    #                     "temperature": sensor_data["temperature"],
+    #                     "r": sensor_data["r"],
+    #                     "g": sensor_data["g"],
+    #                     "b": sensor_data["b"],
+    #                 }
+    #             )
 
-                if predict_res.status_code != 200:
-                    print("❌ Prediction failed:", predict_res.text)
-                    continue
+    #             if predict_res.status_code != 200:
+    #                 print("❌ Prediction failed:", predict_res.text)
+    #                 continue
 
-                prediction = predict_res.json()
-                predictions_in = prediction.get("input", {})
-                predictions_out = prediction.get("predictions", {})
+    #             prediction = predict_res.json()
+    #             predictions_in = prediction.get("input", {})
+    #             predictions_out = prediction.get("predictions", {})
 
-                if not predictions_out:
-                    print("⚠️ Empty prediction result")
-                    continue
+    #             if not predictions_out:
+    #                 print("⚠️ Empty prediction result")
+    #                 continue
 
-                print("🔮 Prediction:", predictions_out)
+    #             print("🔮 Prediction:", predictions_out)
 
-                # 📦 Prepare payload (use ML response as source of truth)
-                payload = {
-                    "moisture": predictions_in.get("Moisture"),
-                    "temperature": predictions_in.get("Temperature"),
-                    "r": predictions_in.get("R"),
-                    "g": predictions_in.get("G"),
-                    "b": predictions_in.get("B"),
-                    "svm_grade": predictions_out.get("SVM"),
-                    "rf_grade": predictions_out.get("Random Forest"),
-                    "knn_grade": predictions_out.get("KNN"),
-                    "lr_grade": predictions_out.get("Logistic Regression"),
-                }
+    #             # 📦 Prepare payload (use ML response as source of truth)
+    #             payload = {
+    #                 "moisture": predictions_in.get("Moisture"),
+    #                 "temperature": predictions_in.get("Temperature"),
+    #                 "r": predictions_in.get("R"),
+    #                 "g": predictions_in.get("G"),
+    #                 "b": predictions_in.get("B"),
+    #                 "svm_grade": predictions_out.get("SVM"),
+    #                 "rf_grade": predictions_out.get("Random Forest"),
+    #                 "knn_grade": predictions_out.get("KNN"),
+    #                 "lr_grade": predictions_out.get("Logistic Regression"),
+    #             }
 
-                print("📤 Sending to Laravel:", payload)
+    #             print("📤 Sending to Laravel:", payload)
 
-                # 📡 SEND TO LARAVEL
-                laravel_res = await client.post(
-                    f"{LARAVEL_API}/batch/{current_batch_id}/samples",
-                    json=payload
-                )
+    #             # 📡 SEND TO LARAVEL
+    #             laravel_res = await client.post(
+    #                 f"{LARAVEL_API}/batch/{current_batch_id}/samples",
+    #                 json=payload
+    #             )
 
-                if laravel_res.status_code != 200:
-                    print("❌ Laravel failed:", laravel_res.text)
+    #             if laravel_res.status_code != 200:
+    #                 print("❌ Laravel failed:", laravel_res.text)
 
-            except Exception as e:
-                print("❌ Error:", str(e))
-
+    #         except Exception as e:
+    #             print("❌ Error:", str(e))
+    print("🔥 LOOP STARTED")
+    
+    # Wait for sensor data
+    print("📥 Waiting for sensor data...")
+    sensor_data = await sensor_queue.get()
+    print("✅ Sensor data received:", sensor_data)
+    
+    if not all(k in sensor_data for k in ("r", "g", "b")):
+        print("⚠️ Skipping incomplete data:", sensor_data)
+        continue
+    
+    # 🔮 CALL ML API
+    predict_res = await client.post(
+        PREDICT_API,
+        json={
+            "moisture": sensor_data["moisture"],
+            "temperature": sensor_data["temperature"],
+            "r": sensor_data["r"],
+            "g": sensor_data["g"],
+            "b": sensor_data["b"],
+        }
+    )
+    
+    print("📡 ML status:", predict_res.status_code)
+    
+    if predict_res.status_code != 200:
+        print("❌ Prediction failed:", predict_res.text)
+        continue
+    
+    prediction = predict_res.json()
+    print("📥 Raw prediction:", prediction)
+    
+    predictions_in = prediction.get("input", {})
+    predictions_out = prediction.get("predictions", {})
+    
+    print("🔮 Prediction parsed:", predictions_out)
+    
+    if not predictions_out:
+        print("⚠️ Empty prediction result")
+        continue
+    
+    # 📦 Build payload
+    payload = {
+        "moisture": predictions_in.get("Moisture"),
+        "temperature": predictions_in.get("Temperature"),
+        "r": predictions_in.get("R"),
+        "g": predictions_in.get("G"),
+        "b": predictions_in.get("B"),
+        "svm_grade": predictions_out.get("SVM"),
+        "rf_grade": predictions_out.get("Random Forest"),
+        "knn_grade": predictions_out.get("KNN"),
+        "lr_grade": predictions_out.get("Logistic Regression"),
+    }
+    
+    print("📤 Payload ready:", payload)
+    
+    # 📡 SEND TO LARAVEL
+    laravel_url = f"{LARAVEL_API}/batch/{current_batch_id}/samples"
+    print("🌐 Laravel URL:", laravel_url)
+    
+    laravel_res = await client.post(laravel_url, json=payload)
+    
+    print("📡 Laravel status:", laravel_res.status_code)
+    print("📡 Laravel response:", laravel_res.text)
 
 # ----------------------------
 # ▶ START TEST
