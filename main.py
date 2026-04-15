@@ -7,7 +7,7 @@ app = FastAPI()
 
 # CONFIG
 LARAVEL_API = "https://ict.ccsit.info/api"
-PREDICT_API = "https://copra-fastapi3.onrender.com/predict"
+PREDICT_API = "https://copra-fastapi3.vercel.app/predict"
 
 # STATE
 current_batch_id = None
