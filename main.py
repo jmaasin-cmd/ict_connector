@@ -6,7 +6,7 @@ import httpx
 app = FastAPI()
 
 # CONFIG
-LARAVEL_API = "https://46.250.235.51/api"
+LARAVEL_API = "http://46.250.235.51/api"
 PREDICT_API = "https://copra-fastapi3.onrender.com/predict"
 
 # STATE
