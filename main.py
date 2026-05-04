@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import asyncio
 import httpx
+import traceback
 
 app = FastAPI()
 
@@ -95,8 +96,10 @@ async def run_test_loop():
                 if laravel_res.status_code != 200:
                     print("Laravel failed:", laravel_res.text)
 
-            except Exception as e:
-                print("Error:", str(e))
+
+            except Exception:
+                print("🔥 FULL ERROR TRACE:")
+                traceback.print_exc()
 
 
 # ----------------------------
