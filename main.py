@@ -8,7 +8,7 @@ app = FastAPI()
 
 # CONFIG
 
-LARAVEL_API = "http://46.250.235.51/api"
+LARAVEL_API = "https://ict.ccsit.info/api"
 PREDICT_API = "https://copra-fastapi3.onrender.com/predict"
 
 # STATE
@@ -97,10 +97,8 @@ async def run_test_loop():
                     print("Laravel failed:", laravel_res.text)
 
 
-            except Exception:
-                print("🔥 FULL ERROR TRACE:")
-                traceback.print_exc()
-
+            except Exception as e:
+                print("Error:", str(e)
 
 # ----------------------------
 # ▶ START TEST
