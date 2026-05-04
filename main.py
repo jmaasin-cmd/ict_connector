@@ -98,7 +98,7 @@ async def run_test_loop():
 
 
             except Exception as e:
-                print("Error:", str(e)
+                print("Error:", str(e))
 
 # ----------------------------
 # ▶ START TEST
